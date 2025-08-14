@@ -1,0 +1,19 @@
+# Test artifacts
+link*.txt
+*.symlink
+
+# Coverage files
+coverage.out
+coverage.html
+
+# Go build artifacts
+secret_manager.exe
+secret_manager
+
+# Temporary files
+*.tmp
+*~
+
+# IDE files
+.vscode/
+.idea/

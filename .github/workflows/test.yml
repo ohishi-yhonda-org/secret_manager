@@ -1,0 +1,42 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: [self-hosted, Windows]
+    strategy:
+      matrix:
+        go: ['1.21', '1.22']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go }}
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Test
+      run: go test -v -race -coverprofile=coverage.out ./...
+
+    - name: Check coverage
+      shell: powershell
+      run: |
+        go tool cover -func=coverage.out
+        $coverage = go tool cover -func=coverage.out | Select-String "total" | ForEach-Object { $_.ToString().Split()[-1].Replace('%','') }
+        Write-Host "Coverage: $coverage%"
+        if ([double]$coverage -lt 95) {
+          Write-Host "Coverage is below 95%"
+          exit 1
+        }
+
+    - name: Build
+      run: go build -v ./...
