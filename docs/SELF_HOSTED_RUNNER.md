@@ -46,7 +46,19 @@ choco install golang -y
 
 # Gitのインストール
 choco install git -y
+
+# Cコンパイラのインストール（race detectorを使用する場合）
+# オプション1: MinGW-w64
+choco install mingw -y
+
+# オプション2: Visual Studio Build Tools（より大きいが推奨）
+choco install visualstudio2022buildtools -y
+choco install visualstudio2022-workload-vctools -y
 ```
+
+#### race detectorを使用しない場合
+
+Cコンパイラのインストールをスキップして、`test-simple.yml`ワークフローを使用してください。
 
 ### 4. ランナーをサービスとして実行
 

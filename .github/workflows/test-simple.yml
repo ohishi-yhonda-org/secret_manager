@@ -1,4 +1,4 @@
-name: Test
+name: Simple Test
 
 on:
   push:
@@ -24,10 +24,8 @@ jobs:
     - name: Get dependencies
       run: go mod download
 
-    - name: Test
-      env:
-        CGO_ENABLED: 1
-      run: go test -v -race -coverprofile=coverage.out ./...
+    - name: Test without race detector
+      run: go test -v -coverprofile=coverage.out ./...
 
     - name: Check coverage
       shell: powershell
