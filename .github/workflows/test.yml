@@ -50,11 +50,23 @@ jobs:
     - name: Check coverage
       shell: powershell
       run: |
-        go tool cover -func=coverage.out
-        $coverage = go tool cover -func=coverage.out | Select-String "total" | ForEach-Object { $_.ToString().Split()[-1].Replace('%','') }
-        Write-Host "Coverage: $coverage%"
-        if ([double]$coverage -lt 95) {
-          Write-Host "Coverage is below 95%"
+        # Run coverage and save output
+        $coverageOutput = go tool cover -func=coverage.out
+        Write-Host $coverageOutput
+        
+        # Extract coverage percentage
+        $lastLine = $coverageOutput | Select-Object -Last 1
+        if ($lastLine -match 'total:\s+\(statements\)\s+(\d+\.?\d*)%') {
+          $coverage = $matches[1]
+          Write-Host "Coverage: $coverage%"
+          
+          if ([double]$coverage -lt 95) {
+            Write-Host "Coverage is below 95%"
+            exit 1
+          }
+        } else {
+          Write-Host "Failed to parse coverage output"
+          Write-Host "Last line was: $lastLine"
           exit 1
         }
 
