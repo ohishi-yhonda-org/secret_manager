@@ -24,10 +24,28 @@ jobs:
     - name: Get dependencies
       run: go mod download
 
-    - name: Test
+    - name: Check for C compiler
+      id: check_compiler
+      shell: powershell
+      run: |
+        try {
+          gcc --version
+          echo "HAS_COMPILER=true" >> $env:GITHUB_OUTPUT
+        } catch {
+          echo "HAS_COMPILER=false" >> $env:GITHUB_OUTPUT
+        }
+
+    - name: Test with race detector
+      if: steps.check_compiler.outputs.HAS_COMPILER == 'true'
+      shell: cmd
       env:
         CGO_ENABLED: 1
       run: go test -v -race -coverprofile=coverage.out ./...
+
+    - name: Test without race detector
+      if: steps.check_compiler.outputs.HAS_COMPILER != 'true'
+      shell: cmd
+      run: go test -v -coverprofile=coverage.out ./...
 
     - name: Check coverage
       shell: powershell

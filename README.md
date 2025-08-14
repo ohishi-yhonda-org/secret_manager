@@ -78,12 +78,11 @@ git push origin v1.0.0
 
 このプロジェクトは以下のGitHub Actionsワークフローを使用しています：
 
-- **test.yml**: プッシュ/PR時に自動テストを実行（race detector付き、カバレッジ95%以上を要求）
-- **test-simple.yml**: Cコンパイラがない環境用の簡易テスト（race detectorなし）
+- **test.yml**: プッシュ/PR時に自動テストを実行（Cコンパイラがあれば自動的にrace detector有効、カバレッジ95%以上を要求）
 - **release.yml**: タグプッシュ時に自動的にマルチプラットフォームビルドを実行し、リリースを作成
 
 ### Self-Hosted Runner
 
 このプロジェクトはWindows self-hostedランナーで実行されます。セットアップ方法については[docs/SELF_HOSTED_RUNNER.md](docs/SELF_HOSTED_RUNNER.md)を参照してください。
 
-**注意**: race detectorを使用するテストを実行する場合は、Cコンパイラ（MinGWまたはVisual Studio Build Tools）のインストールが必要です。
+**注意**: test.ymlは自動的にCコンパイラの有無を検出し、利用可能な場合のみrace detectorを使用します。
