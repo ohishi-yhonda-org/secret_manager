@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -23,11 +24,24 @@ var exitFunc = os.Exit
 // executableDir is a variable to allow mocking in tests
 var executableDir = getExecutableDir
 
+// Version information (set at build time)
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 // osExecutable is a variable to allow mocking in tests
 var osExecutable = os.Executable
 
 // filepathWalk is a variable to allow mocking in tests
 var filepathWalk = filepath.Walk
+
+// findSecretDirs is a variable to allow mocking in tests
+var findSecretDirs = findSecretDirectories
+
+// checkAndUpdateFunc is a variable to allow mocking in tests
+var checkAndUpdateFunc = checkAndUpdate
 
 func getExecutableDir() (string, error) {
 	exe, err := osExecutable()
@@ -60,7 +74,40 @@ func findSecretDirectories(root string) ([]string, error) {
 	return secretDirs, nil
 }
 
+// parseFlags is a variable to allow mocking in tests
+var parseFlags func() (*bool, *bool)
+
+// defaultParseFlags is the default implementation of parseFlags
+func defaultParseFlags() (*bool, *bool) {
+	versionFlag := flag.Bool("version", false, "Show version information")
+	updateFlag := flag.Bool("update", false, "Check for updates and install if available")
+	flag.Parse()
+	return versionFlag, updateFlag
+}
+
+func init() {
+	parseFlags = defaultParseFlags
+}
+
 func main() {
+	// Parse command line flags
+	versionFlag, updateFlag := parseFlags()
+
+	// Handle version flag
+	if *versionFlag {
+		fmt.Printf("secret_manager version %s (commit: %s, built: %s)\n", version, commit, date)
+		exitFunc(0)
+	}
+
+	// Handle update flag
+	if *updateFlag {
+		if err := checkAndUpdateFunc(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error checking for updates: %v\n", err)
+			exitFunc(1)
+		}
+		exitFunc(0)
+	}
+
 	// Get the directory where the executable is located
 	exeDir, err := executableDir()
 	if err != nil {
@@ -76,7 +123,7 @@ func main() {
 	}
 	
 	// Find all directories containing "secret" in their name
-	secretDirs, err := findSecretDirectories(".")
+	secretDirs, err := findSecretDirs(".")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error finding secret directories: %v\n", err)
 		exitFunc(1)

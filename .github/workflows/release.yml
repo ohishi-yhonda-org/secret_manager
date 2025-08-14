@@ -50,7 +50,10 @@ jobs:
         $output_name = "secret_manager-${{ matrix.suffix }}"
         $env:GOOS = "${{ matrix.goos }}"
         $env:GOARCH = "${{ matrix.goarch }}"
-        go build -o $output_name -ldflags="-s -w" main.go
+        $version = "${{ github.ref_name }}"
+        $commit = "${{ github.sha }}".Substring(0, 7)
+        $date = Get-Date -Format "yyyy-MM-dd"
+        go build -o $output_name -ldflags="-s -w -X main.version=$version -X main.commit=$commit -X main.date=$date" .
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4

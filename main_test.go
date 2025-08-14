@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,13 +11,37 @@ import (
 	"time"
 )
 
+// =============================================================================
+// MAIN FUNCTIONALITY TESTS
+// =============================================================================
+// This file contains all tests related to:
+// - Main application execution flow
+// - Symlink creation and management
+// - Directory processing
+// - File operations
+// - Version and flag handling
+// =============================================================================
+
 // TestMain sets up mocking for all tests
 func TestMain(m *testing.M) {
 	// Set up default mock for symlink function to avoid permission issues
 	originalSymlink := symlinkFunc
 	symlinkFunc = mockSymlink
+	
+	// Mock parseFlags to avoid flag redefinition errors
+	originalParseFlags := parseFlags
+	parseFlags = func() (*bool, *bool) {
+		versionFlag := false
+		updateFlag := false
+		return &versionFlag, &updateFlag
+	}
+	
 	code := m.Run()
+	
+	// Restore original functions
 	symlinkFunc = originalSymlink
+	parseFlags = originalParseFlags
+	
 	os.Exit(code)
 }
 
@@ -790,10 +815,113 @@ func TestMainWithNoSecretDirectories(t *testing.T) {
 
 // Test main function with actual findSecretDirectories error  
 func TestMainWithFindDirectoriesActualError(t *testing.T) {
-	// This test is actually redundant because when filepathWalk returns an error immediately,
-	// it seems like the error is not being returned properly. Let's remove this test
-	// since the functionality is already covered by other tests and we have 100% coverage.
-	t.Skip("Skipping redundant test - functionality is covered by other tests")
+	// Save originals
+	originalExitFunc := exitFunc
+	originalExecutableDir := executableDir
+	originalFindSecretDirs := findSecretDirs
+	originalParseFlags := parseFlags
+	defer func() {
+		exitFunc = originalExitFunc
+		executableDir = originalExecutableDir
+		findSecretDirs = originalFindSecretDirs
+		parseFlags = originalParseFlags
+	}()
+
+	// Track exit calls
+	exitCalled := false
+	exitCode := 0
+	exitFunc = func(code int) {
+		exitCalled = true
+		exitCode = code
+		// Don't actually exit, just panic to stop execution
+		panic("test exit")
+	}
+
+	// Mock parseFlags to return no flags
+	parseFlags = func() (*bool, *bool) {
+		versionFlag := false
+		updateFlag := false
+		return &versionFlag, &updateFlag
+	}
+
+	// Mock executable directory
+	executableDir = func() (string, error) {
+		return ".", nil
+	}
+
+	// Mock findSecretDirs to return an error
+	findSecretDirs = func(root string) ([]string, error) {
+		return nil, errors.New("mock find secret dirs error")
+	}
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Run main in a goroutine so we can capture the panic
+	done := make(chan bool)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Expected panic from exit mock
+				if r == "test exit" {
+					done <- true
+				}
+			}
+		}()
+		main()
+		done <- true
+	}()
+
+	// Read output in background
+	outputChan := make(chan string, 1)
+	go func() {
+		buf := make([]byte, 4096)
+		n, _ := r.Read(buf)
+		if n > 0 {
+			outputChan <- string(buf[:n])
+		}
+		close(outputChan)
+	}()
+
+	// Wait for main to complete
+	<-done
+	
+	// Give a moment for output to be written
+	time.Sleep(10 * time.Millisecond)
+	
+	// Get output
+	var output string
+	select {
+	case out := <-outputChan:
+		output = out
+	default:
+		// Try one more read if nothing yet
+		buf := make([]byte, 4096)
+		n, _ := r.Read(buf)
+		if n > 0 {
+			output = string(buf[:n])
+		}
+	}
+
+	// Close writer and restore stderr
+	w.Close()
+	os.Stderr = oldStderr
+
+	// Verify behavior
+	if !exitCalled {
+		t.Error("Expected exitFunc to be called")
+	}
+	if exitCode != 1 {
+		t.Errorf("Expected exit code 1, got %d", exitCode)
+	}
+	if !strings.Contains(output, "Error finding secret directories") {
+		t.Error("Expected error message about finding secret directories")
+	}
+	if !strings.Contains(output, "mock find secret dirs error") {
+		t.Error("Expected mock error message")
+	}
 }
 
 // Test processSecretDirectory returning error in main
@@ -882,4 +1010,322 @@ func TestGetExecutableDir(t *testing.T) {
 			t.Error("Expected error from getExecutableDir")
 		}
 	})
+}
+
+// =============================================================================
+// VERSION AND FLAG TESTS
+// =============================================================================
+// Tests for command line flag handling and version display
+// =============================================================================
+
+// Test version flag
+func TestMainVersionFlag(t *testing.T) {
+	originalExit := exitFunc
+	originalParseFlags := parseFlags
+	
+	exitCalled := false
+	exitCode := 0
+	exitFunc = func(code int) {
+		exitCalled = true
+		exitCode = code
+	}
+	
+	// Mock parseFlags to return version flag
+	parseFlags = func() (*bool, *bool) {
+		versionFlag := true
+		updateFlag := false
+		return &versionFlag, &updateFlag
+	}
+	
+	defer func() {
+		exitFunc = originalExit
+		parseFlags = originalParseFlags
+	}()
+	
+	// Capture stdout
+	r, w, _ := os.Pipe()
+	originalStdout := os.Stdout
+	os.Stdout = w
+	
+	main()
+	
+	w.Close()
+	os.Stdout = originalStdout
+	output := make([]byte, 1024)
+	n, _ := r.Read(output)
+	output = output[:n]
+	
+	if !exitCalled {
+		t.Error("Expected exit to be called")
+	}
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+	
+	// Check output contains version info
+	outputStr := string(output)
+	if len(outputStr) == 0 {
+		t.Error("Expected version output")
+	}
+}
+
+// Test update flag
+func TestMainUpdateFlag(t *testing.T) {
+	originalExit := exitFunc
+	originalParseFlags := parseFlags
+	originalCheckAndUpdate := checkAndUpdateFunc
+	
+	exitCalled := false
+	exitCode := 0
+	exitFunc = func(code int) {
+		exitCalled = true
+		exitCode = code
+	}
+	
+	// Mock parseFlags to return update flag
+	parseFlags = func() (*bool, *bool) {
+		versionFlag := false
+		updateFlag := true
+		return &versionFlag, &updateFlag
+	}
+	
+	// Mock checkAndUpdate
+	checkAndUpdateCalled := false
+	checkAndUpdateFunc = func() error {
+		checkAndUpdateCalled = true
+		return nil
+	}
+	
+	defer func() {
+		exitFunc = originalExit
+		parseFlags = originalParseFlags
+		checkAndUpdateFunc = originalCheckAndUpdate
+	}()
+	
+	main()
+	
+	if !exitCalled {
+		t.Error("Expected exit to be called")
+	}
+	if exitCode != 0 {
+		t.Errorf("Expected exit code 0, got %d", exitCode)
+	}
+	if !checkAndUpdateCalled {
+		t.Error("Expected checkAndUpdate to be called")
+	}
+}
+
+// Test update flag with error
+func TestMainUpdateFlagError(t *testing.T) {
+	originalExit := exitFunc
+	originalParseFlags := parseFlags
+	originalCheckAndUpdate := checkAndUpdateFunc
+	originalExeDir := executableDir
+	
+	exitCalled := false
+	exitCode := 0
+	exitFunc = func(code int) {
+		exitCalled = true
+		exitCode = code
+		// Panic to prevent continuing execution
+		panic("exit called")
+	}
+	
+	// Mock parseFlags to return update flag
+	parseFlags = func() (*bool, *bool) {
+		versionFlag := false
+		updateFlag := true
+		return &versionFlag, &updateFlag
+	}
+	
+	// Mock checkAndUpdate to return error
+	checkAndUpdateFunc = func() error {
+		return os.ErrNotExist
+	}
+	
+	// Mock executableDir (in case it continues)
+	executableDir = func() (string, error) {
+		return ".", nil
+	}
+	
+	defer func() {
+		// Recover from panic
+		if r := recover(); r != nil {
+			// Expected panic from exitFunc
+		}
+		exitFunc = originalExit
+		parseFlags = originalParseFlags
+		checkAndUpdateFunc = originalCheckAndUpdate
+		executableDir = originalExeDir
+	}()
+	
+	// Capture stderr
+	r, w, _ := os.Pipe()
+	originalStderr := os.Stderr
+	os.Stderr = w
+	
+	// Wrap main() call to handle panic
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Expected panic
+			}
+		}()
+		main()
+	}()
+	
+	w.Close()
+	os.Stderr = originalStderr
+	output := make([]byte, 1024)
+	n, _ := r.Read(output)
+	output = output[:n]
+	
+	if !exitCalled {
+		t.Error("Expected exit to be called")
+	}
+	if exitCode != 1 {
+		t.Errorf("Expected exit code 1, got %d", exitCode)
+	}
+	
+	outputStr := string(output)
+	if len(outputStr) == 0 {
+		t.Error("Expected error output")
+	}
+}
+
+// =============================================================================
+// FLAG PARSING TESTS
+// =============================================================================
+
+// Test the actual parseFlags function
+func TestParseFlags(t *testing.T) {
+	// Save original command line args
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	// Reset flag.CommandLine to avoid flag redefined errors
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	
+	tests := []struct {
+		name           string
+		args           []string
+		expectVersion  bool
+		expectUpdate   bool
+	}{
+		{
+			name:          "no flags",
+			args:          []string{"secret_manager"},
+			expectVersion: false,
+			expectUpdate:  false,
+		},
+		{
+			name:          "version flag",
+			args:          []string{"secret_manager", "-version"},
+			expectVersion: true,
+			expectUpdate:  false,
+		},
+		{
+			name:          "update flag",
+			args:          []string{"secret_manager", "-update"},
+			expectVersion: false,
+			expectUpdate:  true,
+		},
+		{
+			name:          "both flags",
+			args:          []string{"secret_manager", "-version", "-update"},
+			expectVersion: true,
+			expectUpdate:  true,
+		},
+	}
+	
+	// Save original parseFlags
+	originalParseFlags := parseFlags
+	defer func() { parseFlags = originalParseFlags }()
+	
+	// Use the real parseFlags implementation
+	parseFlags = func() (*bool, *bool) {
+		// Reset flags for each test
+		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+		versionFlag := flag.Bool("version", false, "Show version information")
+		updateFlag := flag.Bool("update", false, "Check for updates and install if available")
+		flag.Parse()
+		return versionFlag, updateFlag
+	}
+	
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set command line args
+			os.Args = tt.args
+			
+			versionFlag, updateFlag := parseFlags()
+			
+			if *versionFlag != tt.expectVersion {
+				t.Errorf("Expected version flag %v, got %v", tt.expectVersion, *versionFlag)
+			}
+			if *updateFlag != tt.expectUpdate {
+				t.Errorf("Expected update flag %v, got %v", tt.expectUpdate, *updateFlag)
+			}
+		})
+	}
+}
+
+// TestDefaultParseFlags tests the defaultParseFlags function
+func TestDefaultParseFlags(t *testing.T) {
+	// Save original state
+	oldArgs := os.Args
+	oldCommandLine := flag.CommandLine
+	defer func() {
+		os.Args = oldArgs
+		flag.CommandLine = oldCommandLine
+	}()
+
+	tests := []struct {
+		name          string
+		args          []string
+		expectVersion bool
+		expectUpdate  bool
+	}{
+		{
+			name:          "no flags",
+			args:          []string{"secret_manager"},
+			expectVersion: false,
+			expectUpdate:  false,
+		},
+		{
+			name:          "version flag",
+			args:          []string{"secret_manager", "-version"},
+			expectVersion: true,
+			expectUpdate:  false,
+		},
+		{
+			name:          "update flag",
+			args:          []string{"secret_manager", "-update"},
+			expectVersion: false,
+			expectUpdate:  true,
+		},
+		{
+			name:          "both flags",
+			args:          []string{"secret_manager", "-version", "-update"},
+			expectVersion: true,
+			expectUpdate:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set command line args
+			os.Args = tt.args
+			// Reset flag.CommandLine for each test
+			flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+
+			versionFlag, updateFlag := defaultParseFlags()
+
+			if *versionFlag != tt.expectVersion {
+				t.Errorf("Expected version flag %v, got %v", tt.expectVersion, *versionFlag)
+			}
+			if *updateFlag != tt.expectUpdate {
+				t.Errorf("Expected update flag %v, got %v", tt.expectUpdate, *updateFlag)
+			}
+		})
+	}
 }

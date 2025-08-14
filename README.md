@@ -8,6 +8,19 @@ Goで実装されたシンボリックリンク管理システムです。実行
 2. 同じフォルダに`ファイル名.symlink.json`を作成
 3. `secret_manager.exe`を実行（任意のディレクトリから実行可能）
 
+### コマンドラインオプション
+
+```bash
+# シンボリックリンクを作成
+secret_manager
+
+# バージョン情報を表示
+secret_manager -version
+
+# 最新版に自動更新
+secret_manager -update
+```
+
 ## 設定ファイル形式
 
 ```json
@@ -74,12 +87,24 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
+## 自動更新機能
+
+`-update`フラグを使用すると、GitHubから最新バージョンを自動的にダウンロードしてインストールします：
+
+```bash
+secret_manager -update
+```
+
+- 現在のバージョンと最新バージョンを比較
+- 新しいバージョンがある場合は自動的にダウンロード
+- 実行ファイルを置き換え（Windows環境では再起動が必要）
+
 ## GitHub Actions
 
 このプロジェクトは以下のGitHub Actionsワークフローを使用しています：
 
 - **test.yml**: プッシュ/PR時に自動テストを実行（Cコンパイラがあれば自動的にrace detector有効、カバレッジ95%以上を要求）
-- **release.yml**: タグプッシュ時に自動的にマルチプラットフォームビルドを実行し、リリースを作成
+- **release.yml**: タグプッシュ時に自動的にマルチプラットフォームビルドを実行し、リリースを作成（バージョン情報を埋め込み）
 
 ### Self-Hosted Runner
 

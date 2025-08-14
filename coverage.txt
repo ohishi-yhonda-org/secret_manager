@@ -1,0 +1,14 @@
+secret_manager/main.go:43:	getExecutableDir	100.0%
+secret_manager/main.go:52:	findSecretDirectories	100.0%
+secret_manager/main.go:82:	main			93.5%
+secret_manager/main.go:142:	processSecretDirectory	100.0%
+secret_manager/main.go:173:	processSymlinkConfig	100.0%
+secret_manager/main.go:203:	createSymlink		100.0%
+secret_manager/update.go:41:	checkAndUpdate		100.0%
+secret_manager/update.go:83:	getLatestRelease	85.7%
+secret_manager/update.go:108:	findAssetURL		100.0%
+secret_manager/update.go:125:	downloadAndInstall	73.1%
+secret_manager/update.go:172:	extractZip		80.0%
+secret_manager/update.go:207:	extractTarGz		75.0%
+secret_manager/update.go:257:	replaceExecutable	71.4%
+total:				(statements)		88.1%
