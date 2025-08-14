@@ -48,25 +48,30 @@ jobs:
       run: go test -v -coverprofile=coverage.out ./...
 
     - name: Check coverage
+      shell: cmd
+      run: |
+        go tool cover -func=coverage.out > coverage.txt
+        type coverage.txt
+        
+    - name: Verify coverage threshold
       shell: powershell
       run: |
-        # Run coverage and save output
-        $coverageOutput = go tool cover -func=coverage.out
-        Write-Host $coverageOutput
+        $content = Get-Content coverage.txt
+        $lastLine = $content[-1]
+        Write-Host "Last line: $lastLine"
         
-        # Extract coverage percentage
-        $lastLine = $coverageOutput | Select-Object -Last 1
-        if ($lastLine -match 'total:\s+\(statements\)\s+(\d+\.?\d*)%') {
-          $coverage = $matches[1]
+        if ($lastLine -match '(\d+\.?\d*)%') {
+          $coverage = [double]$matches[1]
           Write-Host "Coverage: $coverage%"
           
-          if ([double]$coverage -lt 95) {
+          if ($coverage -lt 95) {
             Write-Host "Coverage is below 95%"
             exit 1
+          } else {
+            Write-Host "Coverage is sufficient: $coverage%"
           }
         } else {
-          Write-Host "Failed to parse coverage output"
-          Write-Host "Last line was: $lastLine"
+          Write-Host "Failed to parse coverage from: $lastLine"
           exit 1
         }
 
